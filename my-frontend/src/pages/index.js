@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AppConfig, UserSession, showConnect } from "@stacks/connect";
+import { AppConfig, UserSession, showConnect, } from "@stacks/connect";
 import { StacksTestnet } from "@stacks/network";
 import {
   tupleCV,
@@ -9,23 +9,18 @@ import {
   bufferCV,
   principalCV,
   listCV,
+  publicKeyToString,
 } from "@stacks/transactions";
 import { hexToBytes } from "@stacks/common";
-import { Transaction } from "bitcoinjs-lib";
+import { Transaction, payments, networks } from "bitcoinjs-lib";
 
 export default function Home() {
   const [userData, setUserData] = useState({});
   const [blockDetails, setBlockDetails] = useState({});
-  // const [blockDetails, setBlockDetails] = useState(
-  //   JSON.parse(localStorage.getItem("blockDetails")) || {}
-  // );
-
-  // const [blockDetails, setBlockDetails] = useState(() => {
-  //   const storedBlockDetails = localStorage.getItem("blockDetails");
-  //   return storedBlockDetails ? JSON.parse(storedBlockDetails) : {};})
+  
   const appConfig = new AppConfig();
   const userSession = new UserSession({ appConfig });
-
+const btcAddress = '' ;
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedBlockDetails = localStorage.getItem("blockDetails");
@@ -102,6 +97,16 @@ export default function Home() {
       onCancel: () => {
         // handle if user closed connection prompt
       },
+      onSucess: async()=>{
+        const userData = userSession.loadUserData();
+        const userPublicKey = publicKeyToString(userData.appPrivateKey);
+         btcAddress = userData.btcAddress;
+
+        console.log('User public key is:', userPublicKey);
+        setUserData(userData);
+
+ 
+      }
     });
   };
 
@@ -113,8 +118,7 @@ export default function Home() {
   // This function sends a Bitcoin transaction and stores the raw transaction and merkle proof in localStorage
  const reserveSlot = async () => {
     const resp = await window.btc?.request("sendTransfer", {
-       // btc address of accounts.wallet_1 in my Devnet.toml 
-      address: "mqVnk6NPRdhntvfm4hh9vvjiRkFDUuSYsH",
+       address: "tb1q5xtjpml6l834x4a9vmqz6802tn94yf7hfdkxlv",
       amount: "100",
     });
 
@@ -125,31 +129,37 @@ export default function Home() {
 
     localStorage.setItem("txStatus", "pending");
   };
-
   const removeWitnessData = (txHex) => {
     const tx = Transaction.fromHex(txHex);
 
+     // Extract the sender's public key from the input's scriptSig
+  const senderPubKey = tx.ins[0].scriptPubKey.getPublicKey();
+  
+    // // Extract the sender's public key from the witness of the first input
+    // const senderPubKey = tx.ins[0].witness[1];
+  
     // Create a new empty transaction
     const newTx = new Transaction();
-
+  
     // Copy version from original transaction
     newTx.version = tx.version;
-
+  
     // Copy inputs from original transaction
     tx.ins.forEach((input) => {
       newTx.addInput(input.hash, input.index);
     });
-
+  
     // Copy outputs from original transaction
     tx.outs.forEach((output) => {
       newTx.addOutput(output.script, output.value);
     });
-
+  
     // Copy locktime from original transaction
     newTx.locktime = tx.locktime;
-
-    return newTx.toHex();
+  
+    return { txHex: newTx.toHex(), senderPubKey };
   };
+  
 
    // This function retrieves raw transaction and merkle proof from localStorage and calls the mint Clarity function
    const mintNFT = async () => {
@@ -160,6 +170,26 @@ export default function Home() {
     if (typeof window !== "undefined") {
       txRaw = removeWitnessData(localStorage.getItem("txRaw"));
       txMerkleProof = JSON.parse(localStorage.getItem("txMerkleProof"));
+    }
+
+    verifyCorrectSender = () => {
+ // Get the P2WPKH address from the user's public key
+ const { address } = payments.p2wpkh({
+  pubkey: Buffer.from(userPublicKey, "hex"),
+  network: networks.testnet,
+});
+
+// Compare the P2WPKH address with the sender's address
+const senderAddress = btcAddress; // Replace with the expected sender's address
+
+return address === senderAddress;
+    };
+
+    
+    // First we need to verify that the sender of this transaction is the same as the user that is signed in
+    if (!verifyCorrectSender()) {
+      console.log("wrong sender");
+      return false;
     }
 
     const blockHeight = blockDetails.block_height;
