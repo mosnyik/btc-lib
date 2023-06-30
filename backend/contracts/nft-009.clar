@@ -39,8 +39,10 @@
         (
             (token-id (+ (var-get last-token-id) u1))
             (tx-was-mined (try! (contract-call? 'ST3QFME3CANQFQNR86TYVKQYCFT7QX4PRXM1V9W6H.clarity-bitcoin-bitbadge-v3 was-tx-mined-compact height tx header proof)))
+            (tx-obj (try! (contract-call? 'ST3QFME3CANQFQNR86TYVKQYCFT7QX4PRXM1V9W6H.clarity-bitcoin-bitbadge-v3 parse-tx tx)))
         )
-        ;; (asserts! (is-eq tx-was-mined true) err-tx-not-mined)
+        
+        (asserts! (is-eq tx-was-mined true) err-tx-not-mined)
         (try! (nft-mint? verifytx token-id recipient))
         (var-set last-token-id token-id)
         (ok token-id)
